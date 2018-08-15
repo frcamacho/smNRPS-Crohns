@@ -10,7 +10,8 @@ Created on Tues Aug 14 8:59:11 2018
  --perc_identity parameter in BLAST. This is necessary for BLAST to calculate the query coverage on hits that passed
  with the desired percent identity. The output is the de-replicated fasta file, and a text file with the unique cluster, 
  proteins or gene names."""
-
+ 
+from Bio import SeqIO
 import pandas as pd 
 import networkx as nx 
 import os 
@@ -59,28 +60,38 @@ def findMaxBGC(matchesArray, qlenDict):
 			maxBGC = match
 	return(maxBGC)
 
-def findUniqueBGCs(subgraphs, bgcList, outdir, outfile):
+def findUniqueBGCs(subgraphs, bgcList, outdir, outfile, allBGCs):
 
 	os.chdir(outdir)
 	uniqueBGCs = []
+	all_matches_BGCs = []
 	for subgraph in subgraphs:
+		print("======================================================")
 		print ('networkx subgraph:', subgraph.nodes())
+		all_matches_BGCs = list(subgraph.nodes()) + all_matches_BGCs
 		longest_bgc = findMaxBGC(subgraph.nodes(), bgcList)
 		uniqueBGCs.append(longest_bgc)
 		print ('Longest BGC in matches:', longest_bgc)
+		print("======================================================")
 
-	if len(uniqueBGCs) == 0:
+	bgcs_no_matches = set(allBGCs) - set(all_matches_BGCs) # bgcs that did not find a match based on conditions 
+
+	bgcs_no_matches_list = list(bgcs_no_matches) # convert to list 
+
+	combined_unique_bgcs = bgcs_no_matches_list + uniqueBGCs
+
+	if len(combined_unique_bgcs) == 0:
 		print("Error: Could not identify any duplicates from input file")
 	else:
-		uniqueKeys_series = pd.Series(uniqueBGCs)
+		uniqueKeys_series = pd.Series(combined_unique_bgcs)
 		uniqueKeys_DF = uniqueKeys_series.to_frame("bgcName")
 		bgcNameFile = outfile + "_uniqueBGCNames.txt"
 		uniqueKeys_DF.to_csv(bgcNameFile, index=False,
 							 sep='\t')  # write dataframe to csv format (text file) of unique BGCs name
-
+		print ('Total unique BGCs:', len(combined_unique_bgcs))
 
 	# return unique cluster list to map list to our BGC master list to make a fasta file
-	return(uniqueBGCs)
+	return(combined_unique_bgcs)
 		
 """Function to create a fasta file using the list of unique BGCs and map those to the original master bgc fasta file """
 def createFastaFile(uniqueBGCList, bgcMasterList, outdir, outfile):
@@ -106,7 +117,7 @@ def main(tabular_file, outdir, outfile, perc_identity, coverage_cutoff, bgc_mast
 
 		query_len_dict = makeLengthDict(dfObject)
 		query_network_graph = createNetworkGraph(dfObject)
-		unique_bgc_list = findUniqueBGCs(query_network_graph, query_len_dict, outdir, outfile)
+		unique_bgc_list = findUniqueBGCs(query_network_graph, query_len_dict, outdir, outfile, unique_qid_array)
 		createFastaFile(unique_bgc_list, bgc_master_file, outdir, outfile)
 
 	else:
@@ -119,14 +130,14 @@ if __name__ == '__main__':
 
 	parser.add_argument('--tabular_file', type=str, required=True, help='blast tabular file results')
 	parser.add_argument('--outdir', type=str,
-						help='directory to output fasta file unique BGCs and text file of unique BGCs name')
+						help='directory to output files')
 	parser.add_argument('--outfile', type=str, required=True, help='name of cohort or project')
 	parser.add_argument('--perc_identity', type=int, required=False, default=95, help='default is 95')
 	parser.add_argument('--coverage_cutoff', type=int, required=False, default=95, help='default is 95')
 	parser.add_argument('--bgc_master_file', type=str, required=True,
 						help='fasta file used for BLAST and de-replication')
 	parser.add_argument('--tabular_file_header', type=str, required=False,
-						default="sseqid qseqid slen qlen qcovs pident Evalue qstart qend")
+						default="sseqid qseqid slen qlen qcovs pident Evalue qstart qend", help='sseqid qseqid slen qlen qcovs pident Evalue qstart qend')
 
 	args = parser.parse_args()
 
