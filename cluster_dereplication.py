@@ -121,8 +121,8 @@ if __name__ == '__main__':
 	parser.add_argument('--outdir', type=str,
 						help='directory to output fasta file unique BGCs and text file of unique BGCs name')
 	parser.add_argument('--outfile', type=str, required=True, help='name of cohort or project')
-	parser.add_argument('--perc_identity', type=int, required=False, default=95, help='default is 95% pident')
-	parser.add_argument('--coverage_cutoff', type=int, required=False, default=95, help='default is 95% query coverage')
+	parser.add_argument('--perc_identity', type=int, required=False, default=95, help='default is 95')
+	parser.add_argument('--coverage_cutoff', type=int, required=False, default=95, help='default is 95')
 	parser.add_argument('--bgc_master_file', type=str, required=True,
 						help='fasta file used for BLAST and de-replication')
 	parser.add_argument('--tabular_file_header', type=str, required=False,
