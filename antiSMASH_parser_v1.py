@@ -38,8 +38,7 @@ def parseAntismashGBK(gbk_ext, sample_id, gbk_path, outfile, outdir):
 								bgc_type = "unknown"
 
 							cluster_seq = str(gb_feature.extract(seq_record.seq)) 
-							fasta_info = ">" + sampleID + '__' + scaffold_id + '__' + str(scaffold_len) + bgc_type + 
-										'__' + 'ANTISMASH'+ '__' + str(cluster_start) + '_' + str(cluster_end) + '\n' + cluster_seq +'\n'
+							fasta_info = ">" + sample_id + '__' + scaffold_id + '__' + str(scaffold_len) + '__' + bgc_type + '__' + 'ANTISMASH'+ '__' + str(cluster_start) + '_' + str(cluster_end) + '\n' + cluster_seq +'\n'
 
 							os.chdir(outdir)
 							parsed_file.write(fasta_info)
@@ -68,8 +67,3 @@ if __name__ == '__main__':
 
 
 	main(args.sample_id, args.gbk_path, args.outdir, args.outfile)
-
-
-
-
-
