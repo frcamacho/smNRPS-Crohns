@@ -6,13 +6,10 @@ Created on Wed Jun  13 12:56:23 2016
 from Bio import SeqIO
 import os 
 
-"""Script parses antiSMASH genbank file to create a master fasta file for detected BGCs in scaffold >5kb in sample."""
+"""Script parses antiSMASH genbank file to create a master fasta file for detected BGCs in scaffold >5KB in sample."""
 def parseAntismashGBK(gbk_ext, sample_id, gbk_path, outfile, outdir): 
 
 	os.chdir(outdir)
-	cluster_start = None 
-	cluster_end = None
-	bgc_type = None
 
 	with open(outfile, 'w') as parsed_file:
 
@@ -24,7 +21,7 @@ def parseAntismashGBK(gbk_ext, sample_id, gbk_path, outfile, outdir):
 				for seq_record in SeqIO.parse(file_name, 'genbank'):
 					scaffold_id = seq_record.description
 					features = seq_record.features
-					scaffold_len = len(str(seq_record.seq))
+					# scaffold_len = len(str(seq_record.seq))
 
 					for gb_feature in features:  # iterate through features 
 
@@ -32,13 +29,14 @@ def parseAntismashGBK(gbk_ext, sample_id, gbk_path, outfile, outdir):
 						if gb_feature.type == 'cluster': 
 							cluster_start = gb_feature.location.nofuzzy_start
 							cluster_end = gb_feature.location.nofuzzy_end
+							cluster_len =  len(gb_feature.location)
 							bgc_type = ''.join(gb_feature.qualifiers.get('product'))
 
 							if bgc_type == '': # if no bgc type information 
 								bgc_type = "unknown"
 
 							cluster_seq = str(gb_feature.extract(seq_record.seq)) 
-							fasta_info = ">" + sample_id + '__' + scaffold_id + '__' + str(scaffold_len) + '__' + bgc_type + '__' + 'ANTISMASH'+ '__' + str(cluster_start) + '_' + str(cluster_end) + '\n' + cluster_seq +'\n'
+							fasta_info = ">" + sample_id + '__' + scaffold_id + '__' + str(cluster_len) + '__' + bgc_type + '__' + 'ANTISMASH'+ '__' + str(cluster_start) + '_' + str(cluster_end) + '\n' + cluster_seq +'\n'
 
 							os.chdir(outdir)
 							parsed_file.write(fasta_info)
