@@ -86,6 +86,7 @@ def calculateBreathAndDepth(counterObject, df, sampleName, sequenceReads, perc_i
 			
 		#Filter reads by percent identity cutoff (95%) and edge/internal read coverage cutoff, 50% and 90% respectively. 
 		if (df.at[index, 'pident'] >= perc_identity):
+			
 			percentReadCoveredByCluster = (((smax - smin) +1) / slength) * 100
 			readPass = filterReadByPos(smin, smax, qmin, qmax, slength, qlength, percentReadCoveredByCluster)
 
@@ -118,8 +119,8 @@ def calculateBreathAndDepth(counterObject, df, sampleName, sequenceReads, perc_i
 			totalHitsPerBGC = queryLenDict[nID].hitCounter
 			bgcPerKiloBase = queryLenDict[nID].length/1000 
 
-			relativeAbundance = totalHitsPerBGC *(seqReadsPerMillion)*(bgcPerKiloBase) # RPKM
-
+			# relativeAbundance = totalHitsPerBGC *(seqReadsPerMillion)*(bgcPerKiloBase) # RPKM
+			relativeAbundance = totalHitsPerBGC / (bgcPerKiloBase * seqReadsPerMillion)
 		except ZeroDivisionError as relativeAbundance: # if counter object is  zero 
 			relativeAbundance = 0 
 
