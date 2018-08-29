@@ -15,7 +15,7 @@ is a tabular result file with BGC name, percent identity, and coverage and taxa 
 """
 
 #Function to make a panda data frame tabular file 
-def makeDataFrame (PATH, coverage_cutoff=95, perc_ident_cutoff=95): 
+def makeDataFrame (PATH, perc_ident_cutoff, coverage_cutoff): 
 	names = ['seqid', 'stitle', 'qseqid', 'qlen', 'qcovs','pident', 'Evalue', 'qstart','qend']
 	dataframe = pd.read_csv(PATH, sep = "\t", names=names, header=None)
 	# filter dataframe by qcovs and percent
@@ -57,11 +57,11 @@ def mapTaxa(df, species_dict):
 # 				seq_record.description = "" 
 # 				SeqIO.write(seq_record, updated_fasta, "fasta")
 
-def main(tabular_file, bgc_fasta_file, outdir, outfile):
+def main(tabular_file, bgc_fasta_file, outdir, outfile, perc_ident_cutoff, coverage_cutoff):
 
 	output_df = pd.DataFrame() # initialize Data Frame 
 
-	bgc_list, blast_df = makeDataFrame(tabular_file)
+	bgc_list, blast_df = makeDataFrame(tabular_file, perc_ident_cutoff, coverage_cutoff)
 	bgc_dict = initializeDict(bgc_list)
 	print(bgc_dict)
 	species_result_dict = mapTaxa(blast_df, bgc_dict)  
@@ -83,9 +83,13 @@ if __name__ == '__main__':
 	parser.add_argument('--tabular_file', type =str, required=True)
 	parser.add_argument('--bgc_fasta_file', type =str, required=True)
 	parser.add_argument('--outdir', type= str) 
-	parser.add_argument('--outfile', type= str, required=True) 
+	parser.add_argument('--outfile', type= str, required=True)
+	parser.add_argument('--perc_ident_cutoff', type= int, required=False, default=95)
+	parser.add_argument('--coverage_cutoff', type= int, required=False, default=95)
+
+
 
 	args = parser.parse_args()
 
 
-	main(args.tabular_file, args.bgc_fasta_file, args.outdir, args.outfile)
+	main(args.tabular_file, args.bgc_fasta_file, args.outdir, args.outfile, args.perc_ident_cutoff, args.coverage_cutoff)
