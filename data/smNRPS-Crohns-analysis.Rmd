@@ -1,0 +1,100 @@
+---
+title: "smNRPS-Crohns-analysis"
+author: "Francine Camacho"
+date: "8/30/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r echo=FALSE}
+#load necessary packages 
+library(tidyverse)
+library(ggsci)
+library(psych)
+library(reshape2)
+
+```
+
+We must filter our BLASTn quantification results by BGC coverage criteria (>=50).
+
+```{r}
+
+#load quantifier data 
+
+quantifier_df <- read_delim("combined-MetaHIT_Gut-spanish-quantifier-results.txt", col_names = F, delim = "\t")
+names(quantifier_df) <- c("bgcName", "Coverage", "RPKM", "Sample") # add column names
+
+filter_quantifier_df <- quantifier_df %>% filter(Coverage >= 50) 
+sample_metadata <- read_csv("sample_metadata.csv", col_names = T)
+
+#add sample metadata to filtered quantifier dataframe 
+filter_quantifier_df <- filter_quantifier_df %>% inner_join(., sample_metadata, by = "Sample")
+# retrieve BGC class from bgcName 
+
+results_df <- filter_quantifier_df %>% separate(., bgcName,c("sampleID", "scaffoldName", "clusterlen", "bgcClass", "software", "Coord"),sep = "__", remove = F) %>% select(-c(2:4,6:7))
+results_df$bgcClass[str_detect(results_df$bgcClass, "-") ==TRUE] <- "hybrid"
+
+```
+
+Summary statistics for filtered data per cohort. 
+
+```{r}
+describeBy(filter_quantifier_df, filter_quantifier_df$GroupAttribute)
+
+filter_quantifier_df %>% group_by(GroupAttribute) %>% count(Sample) %>% ggplot(., aes(x=Sample, y=n, fill = GroupAttribute)) + geom_col() + scale_fill_npg()+ facet_grid(~GroupAttribute, switch = "x", scales = "free_x", space = "free_x") +
+    theme(panel.spacing = unit(0, "lines"), 
+         strip.background = element_blank()) + xlab("Disease")+ theme_classic() + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+Analysis for Crohns vs Controls: iterative KW test; LDA analysis; Random forest 
+
+```{r}
+iterativeKW<-function(df, features){
+  features_pvalues<-list()
+  pvalues<-list()
+  i <-1
+  for (i in 1:length(features)){
+    featureDF<- df %>% filter(bgcName == features[i]) # current feature data 
+    kwResult<-kruskal.test(RPKM ~ GroupAttribute, data = featureDF)
+    features_pvalues <- append(features_pvalues, list(features[i]))
+    pvalues<-append(pvalues, list(kwResult$p.value))
+
+    i<-i+1
+  }
+  resultsDF<-do.call(rbind, Map(data.frame, A=features_pvalues, B=pvalues))
+  names(resultsDF) <- c("features", "pvalues")
+  resultsDF$BH.adjusted <- p.adjust(resultsDF$pvalues, method="BH", n = length(resultsDF$pvalues)) # adjust pvalues 
+  return(resultsDF)
+  
+}
+
+# Function to add BGCs that zeros when a BGC was not found in a Sample 
+prepare_data<-function(df, meatadata_df){
+  data_wide <- dcast(df, bgcName ~ Sample, value.var="RPKM") 
+  data_wide[is.na(data_wide)] <- 0 
+  data_melt <- melt(data_wide) %>%  mutate_if(is.factor, as.character) %>% inner_join(.,meatadata_df, by = c("variable"="Sample") )
+  names(data_melt)[2]<-"Sample"
+  names(data_melt)[3]<-"RPKM"
+  return(data_melt)
+  
+}
+
+filter_quantifier_df_updated <- prepare_data(filter_quantifier_df, sample_metadata) 
+
+quantifier_CD_C <-filter_quantifier_df_updated %>% filter(GroupAttribute == "CD" | GroupAttribute == "C") 
+quantifier_CD_C$GroupAttribute <-as.factor(quantifier_CD_C$GroupAttribute)
+quantifier_CD_C_KW <- iterativeKW(quantifier_CD_C,unique(quantifier_CD_C$bgcName))
+
+quantifier_CD_C_features<-quantifier_CD_C_KW %>% filter(BH.adjusted <=0.05)
+
+feature_df_CD_C <- quantifier_CD_C %>% filter(bgcName %in% quantifier_CD_C_features$features)
+
+model <- lda(formula = GroupAttribute ~ ., 
+          data = feature_df_CD_C)
+
+
+```
