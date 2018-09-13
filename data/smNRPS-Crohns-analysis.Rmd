@@ -23,55 +23,94 @@ We must filter our BLASTn quantification results by BGC coverage criteria (>=50)
 ```{r}
 
 #load quantifier data 
-
 quantifier_df <- read_delim("combined-MetaHIT_Gut-spanish-quantifier-results.txt", col_names = F, delim = "\t")
 names(quantifier_df) <- c("bgcName", "Coverage", "RPKM", "Sample") # add column names
 
-filter_quantifier_df <- quantifier_df %>% filter(Coverage >= 50) 
-sample_metadata <- read_csv("sample_metadata.csv", col_names = T)
+filter_quantifier_df <- quantifier_df %>% filter(Coverage >= 50)  # filter by coverage 
+sample_metadata <- read_csv("sample_metadata.csv", col_names = T) # load metadata
 
 #add sample metadata to filtered quantifier dataframe 
 filter_quantifier_df <- filter_quantifier_df %>% inner_join(., sample_metadata, by = "Sample")
 # retrieve BGC class from bgcName 
-
 results_df <- filter_quantifier_df %>% separate(., bgcName,c("sampleID", "scaffoldName", "clusterlen", "bgcClass", "software", "Coord"),sep = "__", remove = F) %>% select(-c(2:4,6:7))
-results_df$bgcClass[str_detect(results_df$bgcClass, "-") ==TRUE] <- "hybrid"
 
+############################
+#Group BGC Class for figure 
+recode_bgcClass<-function(df){
+  PKS <- c("t2pks","transatpks","t1pks","lantipeptide-t2pks","otherks","otherks-transatpks")
+  NRPS <- c("nrps","nrps-bacteriocin","nrps-ladderane","ladderane-nrps","nrps-lantipeptide","arylpolyene-nrps")
+  Terpene <- "terpene"
+  hybrid_pks_nrps<- c("nrps-t1pks","transatpks-otherks-nrps")
+  Others <- c("arylpolyene","other", "resorcinol","butyrolactone", "ladderane", "siderophore", "hserlactone", "bacteriocin-arylpolyene","amglyccycl","ladderane-arylpolyene")
+  RiPPs <- c("microcin","bacteriocin","lantipeptide","lassopeptide","bacteriocin-lantipeptide","sactipeptide", "thiopeptide","bacteriocin-proteusin", "glycocin","microcin-lassopeptide")
+  
+  df$bgcClass[df$bgcClass %in% PKS ==TRUE] <- "PKS"
+  df$bgcClass[df$bgcClass %in% NRPS ==TRUE] <- "NRPS"
+  df$bgcClass[df$bgcClass == Terpene] <- "Terpene"
+  df$bgcClass[df$bgcClass %in% hybrid_pks_nrps ==TRUE] <- "Hybrid PKS-NRPS"
+  df$bgcClass[df$bgcClass %in% Others ==TRUE] <- "Others"
+  df$bgcClass[df$bgcClass %in% RiPPs ==TRUE] <- "RiPPs"
+  return(df)
+  
+}
+
+spanish_filtered_results<-recode_bgcClass(results_df)
+
+#knitr::kable(spanish_bgc_counts, digits = 2, caption = "BGC class counts identified using antiSMASH in MetaHIT Spanish cohort.")
+#############################
 ```
 
 Summary statistics for filtered data per cohort. 
 
 ```{r}
-describeBy(filter_quantifier_df, filter_quantifier_df$GroupAttribute)
+### calculate hit ratio for each BGC within each cohort 
+calculate_hitRatio <-function(data, metadata){
+  metadata_counts<- metadata %>% group_by(GroupAttribute) %>% count() %>% ungroup()
+  bgc_counts <- data %>% group_by(bgcName,GroupAttribute) %>% count() %>% ungroup()
+  hitRatio_df <- data.frame() # intialize results df 
+  for (i in 1:nrow(metadata_counts)){
+    diseaseStatus <- metadata_counts[i,]$GroupAttribute
+    diseaseStatus_count <- metadata_counts[i,]$n
+    disease_hitratio <- bgc_counts %>% filter(GroupAttribute == diseaseStatus) %>%  mutate(., hitRatio = case_when(GroupAttribute == diseaseStatus ~ (n/diseaseStatus_count)*100))
+    hitRatio_df<-rbind(hitRatio_df,disease_hitratio)
+    
+  }
+  return(hitRatio_df)
+}
 
-filter_quantifier_df %>% group_by(GroupAttribute) %>% count(Sample) %>% ggplot(., aes(x=Sample, y=n, fill = GroupAttribute)) + geom_col() + scale_fill_npg()+ facet_grid(~GroupAttribute, switch = "x", scales = "free_x", space = "free_x") +
+spanish_hitratio <- calculate_hitRatio(spanish_filtered_results, sample_metadata)
+suppressWarnings(describeBy(spanish_hitratio, spanish_hitratio$GroupAttribute)) # #Stats for Hit Ratio
+suppressWarnings(describeBy(spanish_filtered_results, spanish_filtered_results$GroupAttribute)) # Stats for RPKM 
+
+# Try to order facets.
+reorder_within <- function(x, by, within, fun = mean, sep = "___", ...) {
+  new_x <- paste(x, within, sep = sep)
+  stats::reorder(new_x, by, FUN = fun)
+}
+
+
+scale_x_reordered <- function(..., sep = "___") {
+  reg <- paste0(sep, ".+$")
+  ggplot2::scale_x_discrete(labels = function(x) gsub(reg, "", x), ...)
+}
+
+
+scale_y_reordered <- function(..., sep = "___") {
+  reg <- paste0(sep, ".+$")
+  ggplot2::scale_y_discrete(labels = function(x) gsub(reg, "", x), ...)
+}
+
+spanish_filtered_results %>% group_by(GroupAttribute,bgcClass) %>% count(Sample) %>% ggplot(.,aes(reorder_within(Sample, n, GroupAttribute), n)) + geom_col(aes(fill = bgcClass)) + scale_fill_npg()+ facet_grid(~GroupAttribute, switch = "x", scales = "free_x", space = "free_x") + scale_x_reordered()+
     theme(panel.spacing = unit(0, "lines"), 
-         strip.background = element_blank()) + xlab("Disease")+ theme_classic() + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+         strip.background = element_blank()) + xlab("Disease Status")+ ylab("Total BGCs detected") + theme_bw() + theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
+  
+  #theme(axis.text.x = element_text(angle = 90, vjust=0.5, hjust=1))
 
 ```
 
 Analysis for Crohns vs Controls: iterative KW test; LDA analysis; Random forest 
 
 ```{r}
-iterativeKW<-function(df, features){
-  features_pvalues<-list()
-  pvalues<-list()
-  i <-1
-  for (i in 1:length(features)){
-    featureDF<- df %>% filter(bgcName == features[i]) # current feature data 
-    kwResult<-kruskal.test(RPKM ~ GroupAttribute, data = featureDF)
-    features_pvalues <- append(features_pvalues, list(features[i]))
-    pvalues<-append(pvalues, list(kwResult$p.value))
-
-    i<-i+1
-  }
-  resultsDF<-do.call(rbind, Map(data.frame, A=features_pvalues, B=pvalues))
-  names(resultsDF) <- c("features", "pvalues")
-  resultsDF$BH.adjusted <- p.adjust(resultsDF$pvalues, method="BH", n = length(resultsDF$pvalues)) # adjust pvalues 
-  return(resultsDF)
-  
-}
-
 # Function to add BGCs that zeros when a BGC was not found in a Sample 
 prepare_data<-function(df, meatadata_df){
   data_wide <- dcast(df, bgcName ~ Sample, value.var="RPKM") 
@@ -84,17 +123,76 @@ prepare_data<-function(df, meatadata_df){
 }
 
 filter_quantifier_df_updated <- prepare_data(filter_quantifier_df, sample_metadata) 
-
 quantifier_CD_C <-filter_quantifier_df_updated %>% filter(GroupAttribute == "CD" | GroupAttribute == "C") 
-quantifier_CD_C$GroupAttribute <-as.factor(quantifier_CD_C$GroupAttribute)
-quantifier_CD_C_KW <- iterativeKW(quantifier_CD_C,unique(quantifier_CD_C$bgcName))
+quantifier_UC_C <-filter_quantifier_df_updated %>% filter(GroupAttribute == "UC" | GroupAttribute == "C") 
+quantifier_UC_CD <-filter_quantifier_df_updated %>% filter(GroupAttribute == "UC" | GroupAttribute == "CD") 
 
-quantifier_CD_C_features<-quantifier_CD_C_KW %>% filter(BH.adjusted <=0.05)
+#Format dataframe to run lefse 
+source("format_data_for_lefse.R")
 
-feature_df_CD_C <- quantifier_CD_C %>% filter(bgcName %in% quantifier_CD_C_features$features)
+quantifier_CD_C_lefse<-format_data_for_lefse(quantifier_CD_C)
+quantifier_UC_C_lefse<-format_data_for_lefse(quantifier_UC_C)
+quantifier_UC_CD_lefse<-format_data_for_lefse(quantifier_UC_CD)
 
-model <- lda(formula = GroupAttribute ~ ., 
-          data = feature_df_CD_C)
-
-
+#write_delim(quantifier_CD_C_lefse, "quantifier-results-CD_C-spanish-for-lefse.txt",delim="\t")
+#write_delim(quantifier_UC_C_lefse, "quantifier-results-UC_C-spanish-for-lefse.txt",delim="\t")
+#write_delim(quantifier_UC_CD_lefse, "quantifier-results-UC_CD-spanish-for-lefse.txt",delim="\t")
 ```
+
+
+```{r}
+#lefse_CD_C <- read_delim("LEfSe-results/LDA_Effect_Size_CD_C.txt",col_names = F, delim = "\t")
+lefse_CD_C <- read_delim("LEfSe-results/LDA_Effect_Size_CD_C_stricter_pvalue.txt",col_names = F, delim = "\t")
+colnames(lefse_CD_C)<-c("BGC", "log(HighestMean_AllClasses)","class_discriminitive","LDA_score", "pvalue")
+
+lefse_CD_C_discriminative_features <- lefse_CD_C %>% filter(!is.na(class_discriminitive) & !is.na(LDA_score))
+
+
+lefse_CD_C_discriminative_features<-lefse_CD_C_discriminative_features %>% mutate(LDA_score = ifelse(class_discriminitive == "C", -abs(LDA_score), LDA_score))
+                                    
+lefse_CD_C_discriminative_features %>%  mutate(BGC = reorder(BGC, LDA_score)) %>%
+  ggplot(aes(BGC, LDA_score, fill = class_discriminitive)) +
+  geom_bar(stat = "identity")  +
+  ylab("LDA SCORE (log 10)") +
+  coord_flip() + theme_bw() + scale_fill_manual(values = c("#DC0000FF", "#00A087FF")) + theme(legend.position="top") +theme(legend.title=element_blank())
+  
+
+# ideas on how to filter; redo lefse with pvalue 0.01 
+# maybe prevelance cutoff
+ 
+lefse_UC_C <- read_delim("LEfSe-results/LDA_Effect_Size_UC_C_stricter_pvalue.txt",col_names = F, delim = "\t")
+colnames(lefse_UC_C)<-c("BGC", "log(HighestMean_AllClasses)","class_discriminitive","LDA_score", "pvalue")
+
+lefse_UC_C_discriminative_features <- lefse_UC_C %>% filter(!is.na(class_discriminitive) & !is.na(LDA_score))
+
+
+lefse_UC_C_discriminative_features<-lefse_UC_C_discriminative_features %>% mutate(LDA_score = ifelse(class_discriminitive == "C", -abs(LDA_score), LDA_score))
+                                    
+lefse_UC_C_discriminative_features %>%  mutate(BGC = reorder(BGC, LDA_score)) %>%
+  ggplot(aes(BGC, LDA_score, fill = class_discriminitive)) +
+  geom_bar(stat = "identity")  +
+  ylab("LDA SCORE (log 10)") +
+  coord_flip() + theme_bw() + scale_fill_manual(values = c("#DC0000FF", "#00A087FF")) + theme(legend.position="top") +theme(legend.title=element_blank())
+  
+
+
+########################################################
+lefse_UC_CD <- read_delim("LEfSe-results/LDA_Effect_Size_UC_CD_stricter_pvalue.txt",col_names = F, delim = "\t")
+colnames(lefse_UC_CD)<-c("BGC", "log(HighestMean_AllClasses)","class_discriminitive","LDA_score", "pvalue")
+
+lefse_UC_CD_discriminative_features <- lefse_UC_CD %>% filter(!is.na(class_discriminitive) & !is.na(LDA_score))
+
+
+lefse_UC_CD_discriminative_features<-lefse_UC_CD_discriminative_features %>% mutate(LDA_score = ifelse(class_discriminitive == "CD", -abs(LDA_score), LDA_score))
+                                    
+lefse_UC_CD_discriminative_features %>%  mutate(BGC = reorder(BGC, LDA_score)) %>%
+  ggplot(aes(BGC, LDA_score, fill = class_discriminitive)) +
+  geom_bar(stat = "identity")  +
+  ylab("LDA SCORE (log 10)") +
+  coord_flip() + theme_bw() + scale_fill_manual(values = c("#DC0000FF", "#00A087FF")) + theme(legend.position="top") +theme(legend.title=element_blank())
+```
+
+
+
+
+
