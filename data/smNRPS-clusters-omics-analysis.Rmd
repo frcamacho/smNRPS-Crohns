@@ -1,0 +1,65 @@
+---
+title: "MetaHIT-antiSMASH-clusters in HMP2-IBD cohort"
+author: "Francine Camacho"
+date: "9/14/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+# load libraries 
+require(tidyverse)
+require(ggsci)
+require(psych)
+require(ggpubr)
+```
+
+
+```{r}
+# load quantification data for omic's analysis and filter by coverage threshold (>=50)
+quantifier_results_DNA <- read_delim("combined-HMP2-IBD-metagenomes-spanish-clusters-quantifier-results.txt", col_names = F, delim = "\t")
+names(quantifier_results_DNA) <- c("bgcName", "Coverage", "RPKM", "Sample") # add column names
+
+filter_quantifier_results_DNA <- quantifier_results_DNA %>% filter(Coverage >= 50)  # filter by coverage 
+
+quantifier_results_RNA <- read_delim("combined-HMP2-IBD-metatranscriptomes-spanish-clusters-quantifier-results.txt", col_names = F, delim = "\t")
+names(quantifier_results_RNA) <- c("bgcName", "Coverage", "RPKM", "Sample") # add column names
+
+filter_quantifier_results_RNA <- quantifier_results_RNA %>% filter(Coverage >= 50)  # filter by coverage 
+
+################################################################################
+# HMP2 IBD metadata 
+#~/Downloads/hmp2_metadata_downloaded_09_14_2018.csv
+sample_metadata<-read_csv("hmp2_project_metadata_2016-10-15.csv", col_names = TRUE) %>% select(., `External ID`, `Participant ID`,`data_type`, `visit_num`, sex, hispa, race,specify_race, diagnosis )
+
+colnames(sample_metadata)<- c("ExternalID", "ParticipantID", "data_type","visit_num","sex","hispa","race","specify_race", "GroupAttribute")
+
+################### 
+#split metadata by omic's data 
+DNA.metadata<-sample_metadata %>% filter(data_type == "metagenomics")
+RNA.metadata<-sample_metadata %>% filter(data_type == "metatranscriptomics")
+
+#################
+
+DNA_quantifier_df <-filter_quantifier_results_DNA %>% inner_join(., DNA.metadata, by =c("Sample" = "ExternalID"))
+
+RNA_quantifier_df <-filter_quantifier_results_RNA %>% inner_join(., RNA.metadata, by =c("Sample" = "ExternalID"))
+##
+#how many samples/participants are matched for DNA and RNA analyses?
+matched_samples <-DNA.metadata %>% inner_join(.,RNA.metadata, by=c("ExternalID", "ParticipantID","visit_num","sex","hispa","race","specify_race", "GroupAttribute" ))
+paste0( "Total number of Samples:", unique(matched_samples$ExternalID) %>% length())
+paste0( "Total number of Participants:", unique(matched_samples$ParticipantID) %>% length())
+```
+
+```{r}
+
+quantifier_df_matched <- rbind(DNA_quantifier_df,RNA_quantifier_df ) %>% filter(Sample %in% matched_samples$ExternalID )
+
+
+quantifier_df_matched %>% filter(bgcName == "V1.UC61.0__NODE_930_length_26002_cov_3.77986__26002__nrps__ANTISMASH__0_26002" | bgcName == "V1.CD18.3__NODE_78_length_114577_cov_12.9704__43190__nrps__ANTISMASH__49316_92506") %>% ggplot(., aes(bgcName, RPKM, color = GroupAttribute)) + geom_boxplot(outlier.colour = NA) + facet_grid(~data_type) +stat_summary(fun.y = mean, geom = "errorbar", aes(ymax = ..y.., ymin = ..y..), width = .75, linetype = "dashed")+scale_color_npg()+ theme_bw() + geom_jitter(width = 0.2) + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```

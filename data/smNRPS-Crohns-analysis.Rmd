@@ -141,7 +141,7 @@ quantifier_UC_CD_lefse<-format_data_for_lefse(quantifier_UC_CD)
 
 
 ```{r}
-#lefse_CD_C <- read_delim("LEfSe-results/LDA_Effect_Size_CD_C.txt",col_names = F, delim = "\t")
+# Analysis with pvalue <= .01; LDA Score >2 
 lefse_CD_C <- read_delim("LEfSe-results/LDA_Effect_Size_CD_C_stricter_pvalue.txt",col_names = F, delim = "\t")
 colnames(lefse_CD_C)<-c("BGC", "log(HighestMean_AllClasses)","class_discriminitive","LDA_score", "pvalue")
 
@@ -155,7 +155,7 @@ lefse_CD_C_discriminative_features %>%  mutate(BGC = reorder(BGC, LDA_score)) %>
   geom_bar(stat = "identity")  +
   ylab("LDA SCORE (log 10)") +
   coord_flip() + theme_bw() + scale_fill_manual(values = c("#DC0000FF", "#00A087FF")) + theme(legend.position="top") +theme(legend.title=element_blank())
-  
+ ggsave("lefse_CD_C_discriminative_features.eps", width = 10, height = 15, units = "in", device = "eps") 
 
 # ideas on how to filter; redo lefse with pvalue 0.01 
 # maybe prevelance cutoff
@@ -173,7 +173,8 @@ lefse_UC_C_discriminative_features %>%  mutate(BGC = reorder(BGC, LDA_score)) %>
   geom_bar(stat = "identity")  +
   ylab("LDA SCORE (log 10)") +
   coord_flip() + theme_bw() + scale_fill_manual(values = c("#DC0000FF", "#00A087FF")) + theme(legend.position="top") +theme(legend.title=element_blank())
-  
+ggsave("lefse_UC_C_discriminative_features.eps", width = 10, height = 15, units = "in", device = "eps") 
+
 
 
 ########################################################
@@ -190,6 +191,40 @@ lefse_UC_CD_discriminative_features %>%  mutate(BGC = reorder(BGC, LDA_score)) %
   geom_bar(stat = "identity")  +
   ylab("LDA SCORE (log 10)") +
   coord_flip() + theme_bw() + scale_fill_manual(values = c("#DC0000FF", "#00A087FF")) + theme(legend.position="top") +theme(legend.title=element_blank())
+ggsave("lefse_UC_CD_discriminative_features.eps", width = 10, height = 10, units = "in", device = "eps") 
+
+```
+
+```{r}
+#iterative KW similarly to Lefse to retreive p-values for all BGCs and compare to Lefse results 
+#normalized by LEfse methods 
+iterativeKW<-function(df, features){
+  df<- df %>% group_by(Sample) %>% mutate(sumRPKM = sum(RPKM)) %>% mutate(normalizedRPKM = (RPKM/sumRPKM) * 1000000)
+  df$GroupAttribute <-as.factor(df$GroupAttribute)
+  features_pvalues<-list()
+  pvalues<-list()
+  i <-1
+  for (i in 1:length(features)){
+    featureDF<- df %>% filter(bgcName == features[i]) # current feature data 
+    kwResult<-kruskal.test(normalizedRPKM ~ GroupAttribute, data = featureDF)
+    features_pvalues <- append(features_pvalues, list(features[i]))
+    pvalues<-append(pvalues, list(kwResult$p.value))
+
+    i<-i+1
+  }
+  resultsDF<-do.call(rbind, Map(data.frame, A=features_pvalues, B=pvalues))
+  names(resultsDF) <- c("features", "pvalues")
+  #resultsDF$BH.adjusted <- p.adjust(resultsDF$pvalues, method="BH", n = length(resultsDF$pvalues)) # adjust pvalues 
+  return(resultsDF)
+  
+}
+
+quantifier_CD_C_KW <- iterativeKW(quantifier_CD_C,unique(quantifier_CD_C$bgcName)) 
+#%>%filter(pvalues < 0.05)
+quantifier_CD_C_KW$pvalues[quantifier_CD_C_KW$pvalues == "NaN"]<- "-"
+
+
+
 ```
 
 

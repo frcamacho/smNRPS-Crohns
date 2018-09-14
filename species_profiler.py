@@ -16,12 +16,12 @@ is a tabular result file with BGC name, percent identity, and coverage and taxa 
 
 #Function to make a panda data frame tabular file 
 def makeDataFrame (PATH, perc_ident_cutoff, coverage_cutoff): 
-	names = ['seqid', 'stitle', 'qseqid', 'qlen', 'qcovs','pident', 'Evalue', 'qstart','qend']
+	names = ['seqid', 'stitle', 'sacc', 'qseqid', 'qlen', 'qcovs','pident', 'Evalue', 'qstart','qend']
 	dataframe = pd.read_csv(PATH, sep = "\t", names=names, header=None)
 	# filter dataframe by qcovs and percent
 	filter_dataframe = dataframe[(dataframe.qcovs >= coverage_cutoff) & (dataframe.pident >= perc_ident_cutoff)]
-	unique_bgcs= dataframe['qseqid'].unique() 
-	return unique_bgcs,filter_dataframe
+	# unique_bgcs= dataframe['qseqid'].unique() 
+	return filter_dataframe
 
 
 def initializeDict(bgc_list):
@@ -35,12 +35,13 @@ def mapTaxa(df, species_dict):
 		bgc_name = df.at[index,'qseqid']
 		species = df.at[index, 'stitle']
 		coverage = df.at[index, 'qcovs']
+		accession_id = df.at[index, 'sacc']
 		percent_identity = df.at[index, 'pident']
 		species_title = species.replace(" ", "_")
-		species_dict[bgc_name] = [species_title,percent_identity,coverage]
+		species_dict[bgc_name] = [species_title, accession_id, percent_identity,coverage]
 	for bgc in species_dict: 
 		if species_dict[bgc] == 'N/A': 
-			species_dict[bgc] = ['N/A', '0.0', '0.0']
+			species_dict[bgc] = ['N/A', 'N/A','0.0', '0.0']
 	return(species_dict)
 
 # def updateFASTA(species_dict, fasta_file, outdir, outfile):
@@ -61,16 +62,19 @@ def main(tabular_file, bgc_fasta_file, outdir, outfile, perc_ident_cutoff, cover
 
 	output_df = pd.DataFrame() # initialize Data Frame 
 
-	bgc_list, blast_df = makeDataFrame(tabular_file, perc_ident_cutoff, coverage_cutoff)
+	blast_df = makeDataFrame(tabular_file, perc_ident_cutoff, coverage_cutoff)
+	bgc_fasta_file_seqIO = SeqIO.parse(bgc_fasta_file, "fasta")
+	bgc_list = [record.id for record in bgc_fasta_file_seqIO ]
+
 	bgc_dict = initializeDict(bgc_list)
 	print(bgc_dict)
 	species_result_dict = mapTaxa(blast_df, bgc_dict)  
-	df2 = [(k, v[0], v[1], v[2]) for k, v in list(species_result_dict.items())]
+	df2 = [(k, v[0], v[1], v[2], v[3]) for k, v in list(species_result_dict.items())]
 	output_df = output_df.append(df2) # append list to our initalized dataframe 
 
 
 	os.chdir(outdir)
-	output_df.columns = ["BGC_NAME", "TAXA_NAME", "PERC_IDENT", "COVERAGE"] # rename column names 
+	output_df.columns = ["BGC_NAME", "TAXA_NAME", "ACC_ID", "PERC_IDENT", "COVERAGE"] # rename column names 
 	output_df.to_csv(outfile, index=False, sep='\t') # write dataframe to csv format (text file)
 
 	# updateFASTA(species_result_dict, bgc_fasta_file, outdir, outfile)
