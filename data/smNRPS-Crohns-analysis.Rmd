@@ -15,6 +15,7 @@ library(tidyverse)
 library(ggsci)
 library(psych)
 library(reshape2)
+library(ggpubr)
 
 ```
 
@@ -58,6 +59,46 @@ spanish_filtered_results<-recode_bgcClass(results_df)
 
 #knitr::kable(spanish_bgc_counts, digits = 2, caption = "BGC class counts identified using antiSMASH in MetaHIT Spanish cohort.")
 #############################
+#cultured bacteria vs uncultivated bacteria pie chart
+
+species_df <- read_csv("species-profiler-results/species_results-MetaHIT-spanish_UniProt.csv", col_names = T)
+species_df[is.na(species_df)]<-"N/A"
+species_df$PHYLUM <- ifelse(species_df$PHYLUM == "N/A", species_df$Manual_PHYLUM, species_df$PHYLUM)
+species_df$ORGANISM <- ifelse(species_df$ORGANISM == "N/A", species_df$Manual_ORGANISM, species_df$ORGANISM)
+
+species_df$PHYLUM[species_df$PHYLUM == "N/A" ] <-"Unassigned"
+
+plot_piechart<- function(df){
+  pie.df <- df %>% group_by(PHYLUM) %>% count() %>% ungroup() %>%  mutate(perc=n/sum(n)*100.0) %>% arrange(desc(n)) 
+  pie.df$PHYLUM <- factor(pie.df$PHYLUM, levels = pie.df$PHYLUM[order(pie.df$perc)])
+  
+  blank_theme <- theme_minimal()+
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text =  element_blank(),
+    panel.border = element_blank(),
+    panel.grid=element_blank(),
+    axis.ticks = element_blank(),
+    plot.title=element_text(size=14, face="bold")
+  )
+  
+  ggplot(pie.df, aes(x = "", y=perc, fill = factor(PHYLUM))) + 
+    geom_col(width=1, color = "white")+
+    coord_polar(theta = "y")+
+    geom_text(aes(label=paste0(sprintf("%0.1f", round(perc, digits = 2)), "%")), 
+              size=4,
+              color="black",
+              position = position_stack(vjust = .5)) + guides(fill = guide_legend(reverse = TRUE)) +
+    scale_fill_npg() +
+    theme_classic() + blank_theme + labs(fill='Phylum') 
+  ggsave("BGC-assigned-Phylum-piechart.eps", width = 11, height = 8, units = "in", device = "eps") 
+
+  
+}
+
+plot_piechart(species_df) # plot for piechart bacterial Phyla assigned to BGC 
+
 ```
 
 Summary statistics for filtered data per cohort. 
@@ -79,9 +120,55 @@ calculate_hitRatio <-function(data, metadata){
 }
 
 spanish_hitratio <- calculate_hitRatio(spanish_filtered_results, sample_metadata)
+
+################################################
+#Quanitfication of the exact CB and CC clusters for MetaHIT 
+rainin_df <- read_delim("combined-MetaHIT_Gut-rainin-quantifier-results.txt", delim = "\t",col_names = FALSE)%>%filter(X2 >= 50) %>% inner_join(., sample_metadata, by = c("X4"="Sample"))
+names(rainin_df)[1:4] <- c("bgcName", "Coverage", "RPKM", "Sample") # add column names
+
+rainin_df_hitratio <- calculate_hitRatio(rainin_df, sample_metadata)
+
+prepare_rainin_data <- function(df, metadata_df){
+  missingsamples<- metadata_df %>% filter(!Sample %in% df$Sample)
+  df_wide <- dcast(df, bgcName ~ Sample, value.var="RPKM") 
+  i<-1
+  for (i in 1:nrow(missingsamples)){
+    sample_col <- missingsamples[i,]$Sample
+    df_wide[, sample_col]<-NA
+    i<- i+1 
+  
+  }
+  df_wide[is.na(df_wide)] <- 0 
+  df_melt <- melt(df_wide) %>%  mutate_if(is.factor, as.character) %>% inner_join(.,metadata_df, by = c("variable"="Sample") )
+  names(df_melt)[2]<-"Sample"
+  names(df_melt)[3]<-"RPKM"
+  return(df_melt)
+  
+}
+
+rainin_df_update<- prepare_rainin_data(rainin_df, sample_metadata)
+
+bar_plot_per_cluster<- function(df, cluster){
+  plot_title <- paste0(cluster, "-","barplot",".eps")
+  df %>% filter(bgcName == cluster) %>% group_by(GroupAttribute) %>% mutate(ymean= mean(RPKM)) %>% mutate(ymedian= median(RPKM)) %>%  ggplot(., aes(Sample,RPKM)) + geom_col()+geom_hline(aes(yintercept=ymedian), color="red", linetype="dashed")+geom_hline(aes(yintercept=ymean), color="red", linetype="solid")+theme_pubclean()+ facet_grid(~GroupAttribute, switch= "x",scales = "free_x", space = "free_x") + xlab("Disease")+  theme(
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) + ggtitle(cluster) + theme(plot.title = element_text(hjust = 0.5,face = "bold",size = "24"))
+  
+   ggsave(plot_title, width = 11, height = 5, units = "in", device = "eps") 
+
+}
+
+bar_plot_per_cluster(rainin_df_update, "smNRPS-CC" )
+bar_plot_per_cluster(rainin_df_update, "smNRPS-CB" )
+bar_plot_per_cluster(rainin_df_update, "smNRPS-BP" )
+################################################
+#smNRPS-CB:V1.UC61.0__NODE_930_length_26002_cov_3.77986__26002__nrps__ANTISMASH__0_26002 
+spanish_hitratio %>% filter(bgcName == "V1.UC61.0__NODE_930_length_26002_cov_3.77986__26002__nrps__ANTISMASH__0_26002")
+#smNRPS-CC:V1.CD18.3__NODE_78_length_114577_cov_12.9704__43190__nrps__ANTISMASH__49316_92506
+spanish_hitratio %>% filter(bgcName == "V1.CD18.3__NODE_78_length_114577_cov_12.9704__43190__nrps__ANTISMASH__49316_92506")
 suppressWarnings(describeBy(spanish_hitratio, spanish_hitratio$GroupAttribute)) # #Stats for Hit Ratio
 suppressWarnings(describeBy(spanish_filtered_results, spanish_filtered_results$GroupAttribute)) # Stats for RPKM 
-
+spanish_filtered_results %>% group_by(GroupAttribute) %>% count(Sample) %>% describeBy(., .$GroupAttribute)# Stats for Total BGCs in each sample
 # Try to order facets.
 reorder_within <- function(x, by, within, fun = mean, sep = "___", ...) {
   new_x <- paste(x, within, sep = sep)
@@ -99,23 +186,42 @@ scale_y_reordered <- function(..., sep = "___") {
   reg <- paste0(sep, ".+$")
   ggplot2::scale_y_discrete(labels = function(x) gsub(reg, "", x), ...)
 }
-
+######## 
+#figure for BGC cclass total molecules detected in each samples in each cohort 
 spanish_filtered_results %>% group_by(GroupAttribute,bgcClass) %>% count(Sample) %>% ggplot(.,aes(reorder_within(Sample, n, GroupAttribute), n)) + geom_col(aes(fill = bgcClass)) + scale_fill_npg()+ facet_grid(~GroupAttribute, switch = "x", scales = "free_x", space = "free_x") + scale_x_reordered()+
     theme(panel.spacing = unit(0, "lines"), 
          strip.background = element_blank()) + xlab("Disease Status")+ ylab("Total BGCs detected") + theme_bw() + theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
-  
-  #theme(axis.text.x = element_text(angle = 90, vjust=0.5, hjust=1))
+#########
 
+wilcoxon_test<-function(df, cohort, testType){
+  df$GroupAttribute <-as.factor(df$GroupAttribute)
+  print(levels(df$GroupAttribute))
+  results<-df  %>% group_by(GroupAttribute) %>% count(Sample) %>% wilcox.test(n ~ GroupAttribute, data=., paired=F, alternative = testType,subset = GroupAttribute %in% cohort )
+  print(results)
+}
+
+#levels = "C"  "CD" "UC"
+wilcoxon_test(spanish_filtered_results, c("C", "CD"), "greater") # twosided=8.806e-05/ 4.403e-05
+wilcoxon_test(spanish_filtered_results, c("CD", "UC"), "less") # twosided=0.0008254,0.0004127
+wilcoxon_test(spanish_filtered_results, c("C", "UC"), "greater")#twosided=0.175, 0.08748
+```
+
+```{r}
+spanish_filtered_results %>% filter(GroupAttribute == "C" | GroupAttribute == "CD") %>% group_by(GroupAttribute) %>% count(Sample)%>% ggplot(., aes(GroupAttribute, n, color = GroupAttribute)) + geom_boxplot(outlier.colour = NA) +  geom_jitter(width = 0.2)+stat_summary(fun.y = mean, geom = "errorbar", aes(ymax = ..y.., ymin = ..y..), width = .75, linetype = "dashed")+scale_color_npg()+ theme_classic() +annotate("text", x = 1.5, y = 300, label = "Wilcoxon, p = 4.403e-05")+stat_compare_means(comparisons = list( c("C", "CD")),label = "p.signif", paired =F) 
+
+spanish_filtered_results %>% filter(GroupAttribute == "UC" | GroupAttribute == "CD") %>% group_by(GroupAttribute) %>% count(Sample)%>% ggplot(., aes(GroupAttribute, n, color = GroupAttribute)) + geom_boxplot(outlier.colour = NA) +  geom_jitter(width = 0.2)+stat_summary(fun.y = mean, geom = "errorbar", aes(ymax = ..y.., ymin = ..y..), width = .75, linetype = "dashed")+scale_color_npg()+ theme_classic() +annotate("text", x = 1.5, y = 300, label = "Wilcoxon, p = 0.0004127")+stat_compare_means(comparisons = list( c("UC", "CD")),label = "p.signif", paired =F) 
+
+spanish_filtered_results %>% filter(GroupAttribute == "UC" | GroupAttribute == "C") %>% group_by(GroupAttribute) %>% count(Sample)%>% ggplot(., aes(GroupAttribute, n, color = GroupAttribute)) + geom_boxplot(outlier.colour = NA) +  geom_jitter(width = 0.2)+stat_summary(fun.y = mean, geom = "errorbar", aes(ymax = ..y.., ymin = ..y..), width = .75, linetype = "dashed")+scale_color_npg()+ theme_classic() +annotate("text", x = 1.5, y = 300, label = "Wilcoxon, p = 0.08748")+stat_compare_means(comparisons = list( c("UC", "C")),label = "p.format", paired =F) 
 ```
 
 Analysis for Crohns vs Controls: iterative KW test; LDA analysis; Random forest 
 
 ```{r}
 # Function to add BGCs that zeros when a BGC was not found in a Sample 
-prepare_data<-function(df, meatadata_df){
+prepare_data<-function(df, metadata_df){
   data_wide <- dcast(df, bgcName ~ Sample, value.var="RPKM") 
   data_wide[is.na(data_wide)] <- 0 
-  data_melt <- melt(data_wide) %>%  mutate_if(is.factor, as.character) %>% inner_join(.,meatadata_df, by = c("variable"="Sample") )
+  data_melt <- melt(data_wide) %>%  mutate_if(is.factor, as.character) %>% inner_join(.,metadata_df, by = c("variable"="Sample") )
   names(data_melt)[2]<-"Sample"
   names(data_melt)[3]<-"RPKM"
   return(data_melt)
@@ -142,6 +248,7 @@ quantifier_UC_CD_lefse<-format_data_for_lefse(quantifier_UC_CD)
 
 ```{r}
 # Analysis with pvalue <= .01; LDA Score >2 
+########################################################
 lefse_CD_C <- read_delim("LEfSe-results/LDA_Effect_Size_CD_C_stricter_pvalue.txt",col_names = F, delim = "\t")
 colnames(lefse_CD_C)<-c("BGC", "log(HighestMean_AllClasses)","class_discriminitive","LDA_score", "pvalue")
 
@@ -157,8 +264,7 @@ lefse_CD_C_discriminative_features %>%  mutate(BGC = reorder(BGC, LDA_score)) %>
   coord_flip() + theme_bw() + scale_fill_manual(values = c("#DC0000FF", "#00A087FF")) + theme(legend.position="top") +theme(legend.title=element_blank())
  ggsave("lefse_CD_C_discriminative_features.eps", width = 10, height = 15, units = "in", device = "eps") 
 
-# ideas on how to filter; redo lefse with pvalue 0.01 
-# maybe prevelance cutoff
+########################################################
  
 lefse_UC_C <- read_delim("LEfSe-results/LDA_Effect_Size_UC_C_stricter_pvalue.txt",col_names = F, delim = "\t")
 colnames(lefse_UC_C)<-c("BGC", "log(HighestMean_AllClasses)","class_discriminitive","LDA_score", "pvalue")
@@ -196,6 +302,18 @@ ggsave("lefse_UC_CD_discriminative_features.eps", width = 10, height = 10, units
 ```
 
 ```{r}
+#Venn diagram 
+# 
+# lefse_CD_C_discriminative_features
+# lefse_UC_C_discriminative_features
+# lefse_UC_CD_discriminative_features
+# 
+# enrichedUC_C_list<-lefse_UC_C_discriminative_features%>% filter(class_discriminitive == "UC")
+# enrichedUC_CD_list<-lefse_UC_CD_discriminative_features%>% filter(class_discriminitive == "UC")
+# gplots::venn(list(enrichedCD_C = enrichedUC_C_list$BGC, enrichedUC_CD = enrichedUC_CD_list$BGC))
+```
+
+```{r}
 #iterative KW similarly to Lefse to retreive p-values for all BGCs and compare to Lefse results 
 #normalized by LEfse methods 
 iterativeKW<-function(df, features){
@@ -219,14 +337,79 @@ iterativeKW<-function(df, features){
   
 }
 
+####################################
 quantifier_CD_C_KW <- iterativeKW(quantifier_CD_C,unique(quantifier_CD_C$bgcName)) 
-#%>%filter(pvalues < 0.05)
 quantifier_CD_C_KW$pvalues[quantifier_CD_C_KW$pvalues == "NaN"]<- "-"
 
+###################################
+quantifier_UC_C_KW <- iterativeKW(quantifier_UC_C,unique(quantifier_UC_C$bgcName)) 
+quantifier_UC_C_KW$pvalues[quantifier_UC_C_KW$pvalues == "NaN"]<- "-"
+
+###################################
+quantifier_UC_CD_KW <- iterativeKW(quantifier_UC_CD,unique(quantifier_UC_CD$bgcName)) 
+quantifier_UC_CD_KW$pvalues[quantifier_UC_C_KW$pvalues == "NaN"]<- "-"
+
+###################################
+supplementary_tables<-function(df, kw_df,taxa_df){
+  
+  new_df <- df %>% separate(., BGC, into=c("Sample","ScaffoldName", "bgcLen", "bgcClass", "Software","Coords" ), sep = "__")
+  recode_df<- new_df %>% mutate(Sample = str_replace_all(Sample, "_", ".")) %>% mutate(ScaffoldName=stringi::stri_replace_last_fixed(ScaffoldName, '_', '.')) %>% mutate(bgcClass=str_replace_all(bgcClass, '_', '-'))%>%unite(., "BGC",c("Sample","ScaffoldName",  "bgcLen", "bgcClass", "Software","Coords" ), sep = "__")
+  recode_df[is.na(recode_df)]<-"-"
+  
+  supp_table<-recode_df%>% inner_join(.,kw_df, by= c("BGC" = "features"))%>% inner_join(.,taxa_df, by = c("BGC"="BGC_NAME")) %>% select(., 1:6,8,11:12)
+  names(supp_table)[5]<-"LEfSe_pvalue"
+  names(supp_table)[6]<-"manual_pvalue"
+  names(supp_table)[7]<-"NCBI refrence sequence acession number"
+  names(supp_table)[8]<-"Taxa Name"
+  names(supp_table)[9]<-"Phylum"
+  return(supp_table)
+  }
+
+lefse_CD_C_supp_table<-supplementary_tables(lefse_CD_C,quantifier_CD_C_KW,species_df)
+
+#write_csv(lefse_CD_C_supp_table, "lefse_CD_C_supp_table_1.csv", col_names = T)
+lefse_UC_C_supp_table<-supplementary_tables(lefse_UC_C,quantifier_UC_C_KW,species_df)
+#write_csv(lefse_UC_C_supp_table, "lefse_UC_C_supp_table_2.csv", col_names = T)
+lefse_UC_CD_supp_table<-supplementary_tables(lefse_UC_CD,quantifier_UC_CD_KW,species_df)
+#write_csv(lefse_UC_CD_supp_table, "lefse_UC_CD_supp_table_3.csv", col_names = T)
+```
+
+
+```{r}
+#Heatmap of RPKM total 
+# 
+# lefse_CD_C_recode_important_feat<-lefse_CD_C_supp_table %>% filter(class_discriminitive!= "-" & LDA_score!="-") 
+# heatmap_RPKM <- filter_quantifier_df_updated  %>% filter(GroupAttribute == "CD" | GroupAttribute == "C") %>% filter(bgcName %in% lefse_CD_C_recode_important_feat$BGC)%>% select(-c(4))
+# data_wide <- dcast(heatmap_RPKM, bgcName ~ Sample, value.var="RPKM") 
+# row.names(data_wide)<- data_wide$bgcName
+# 
+# 
+# 
+# data_wide<-data_wide[,-1]
+# data_wide[is.na(data_wide)] <- 0
+# data_wide<-as.matrix(data_wide)
+# 
+# annotations<-read.csv("sample_metadata.csv", header=TRUE, sep=",")
+# rownames(annotations)<-annotations$Sample
+# annotations_col<-annotations[-c(1)]
+# 
+# #Colors for heatmap 
+# bk = unique(c(seq(0,0, length=100), seq(0.06,90,length=1000)))
+# hmcols<- colorRampPalette(c("white","blue","green","yellow","orange","red"))(length(bk)-1)
+# 
+# pheatmap::pheatmap(data_wide, scale = "none", breaks=bk, color=hmcols,annotation= annotations_col,show_rownames=FALSE, show_colnames = FALSE,
+#                    clustering_distance_rows = "correlation", clustering_distance_cols = "correlation", 
+#                    clustering_method = "complete",main="Complete clustering using correlation distance metric of RPKM of BGCs")
+# 
+# 
+# km<-kmeans(data_wide,2)
+# m.kmeans<- cbind(data_wide, km$cluster) 
+# order.m.kmeans<- order(m.kmeans[,93])
+# m.kmeans<- m.kmeans[order.m.kmeans,] # order the matrix according to the order of the last column
+# pheatmap::pheatmap(m.kmeans[,1:92], scale = "none", breaks=bk, color=hmcols,annotation= annotations_col,show_rownames=FALSE, show_colnames = FALSE, main="Kmean clustering (2) of Relative Score of BGCs above 50% breadth")
 
 
 ```
-
 
 
 

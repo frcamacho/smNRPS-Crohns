@@ -36,7 +36,6 @@ filter_quantifier_results_RNA <- quantifier_results_RNA %>% filter(Coverage >= 5
 # HMP2 IBD metadata 
 #~/Downloads/hmp2_metadata_downloaded_09_14_2018.csv
 sample_metadata<-read_csv("hmp2_project_metadata_2016-10-15.csv", col_names = TRUE) %>% select(., `External ID`, `Participant ID`,`data_type`, `visit_num`, sex, hispa, race,specify_race, diagnosis )
-
 colnames(sample_metadata)<- c("ExternalID", "ParticipantID", "data_type","visit_num","sex","hispa","race","specify_race", "GroupAttribute")
 
 ################### 
@@ -62,4 +61,51 @@ quantifier_df_matched <- rbind(DNA_quantifier_df,RNA_quantifier_df ) %>% filter(
 
 
 quantifier_df_matched %>% filter(bgcName == "V1.UC61.0__NODE_930_length_26002_cov_3.77986__26002__nrps__ANTISMASH__0_26002" | bgcName == "V1.CD18.3__NODE_78_length_114577_cov_12.9704__43190__nrps__ANTISMASH__49316_92506") %>% ggplot(., aes(bgcName, RPKM, color = GroupAttribute)) + geom_boxplot(outlier.colour = NA) + facet_grid(~data_type) +stat_summary(fun.y = mean, geom = "errorbar", aes(ymax = ..y.., ymin = ..y..), width = .75, linetype = "dashed")+scale_color_npg()+ theme_bw() + geom_jitter(width = 0.2) + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+
+```{r}
+# load quantification data for omic's analysis and filter by coverage threshold (10 % in RNA no cutoff % DNA)
+rainin.exact_results_DNA <- read_delim("combined-HMP2-IBD-metagenomes-rainin-quantifier-results.txt", col_names = F, delim = "\t")
+names(rainin.exact_results_DNA) <- c("bgcName", "Coverage", "RPKM", "Sample") # add column names
+rainin.exact_results_DNA$data_type<-"metagenomics"
+# no cutoff for DNA we have an assumption that if it is detected in the RNA than it will be detected in the DNA 
+
+rainin.exact_results_RNA <- read_delim("combined-HMP2-IBD-metatranscriptomes-rainin-quantifier-results.txt", col_names = F, delim = "\t")
+names(rainin.exact_results_RNA) <- c("bgcName", "Coverage", "RPKM", "Sample") # add column names
+
+filter_rainin.exact_results_RNA <- rainin.exact_results_RNA %>% filter(Coverage >= 10)  # filter by coverage 
+filter_rainin.exact_results_RNA$data_type<-"metatranscriptomics"
+
+rainin.exact_matched <- rbind(rainin.exact_results_DNA,filter_rainin.exact_results_RNA ) %>% filter(Sample %in% matched_samples$ExternalID )%>% inner_join(.,matched_samples%>% select(-c(3,10)), by = c("Sample"= "ExternalID"))
+
+rainin.exact_matched%>% ggplot(., aes(x=Sample, y =bgcName )) +geom_tile(aes(fill = RPKM),colour = "black", width=.9, height = .9)+scale_fill_gradient2(low="darkblue", high="darkgreen", guide="colorbar")+facet_grid(data_type~GroupAttribute, switch = "both", scales = "free", space = "free") +
+    theme(panel.spacing = unit(0, "lines"), 
+         strip.background = element_blank()) + xlab("Disease")+ theme_classic() + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + ggtitle("Target BGCs Relative Score amongst Different Cohorts")
+
+rainin.exact_matched_byParticipant <- rainin.exact_matched %>% group_by(ParticipantID,data_type,bgcName) %>% mutate(meanRPKM = mean(RPKM))
+
+rainin.exact_matched_byParticipant%>% ggplot(., aes(x=ParticipantID, y =bgcName )) +geom_tile(aes(fill = meanRPKM),colour = "black", width=.9, height = .9)+scale_fill_gradient2(low="darkblue", high="darkgreen", guide="colorbar")+facet_grid(data_type~GroupAttribute, switch = "both", scales = "free", space = "free") +
+    theme(panel.spacing = unit(0, "lines"), 
+         strip.background = element_blank()) + xlab("Disease")+ theme_classic() + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + ggtitle("Target BGCs Relative Score amongst Different Cohorts")
+
+```
+
+log10(RNA/DNA) RPKM Ratio analysis (By Sample)
+
+```{r}
+rainin.exact_matched_wide <- rainin.exact_matched %>% filter(bgcName != "smNRPS-BP") %>% group_by(ParticipantID) %>% mutate(meanRPKM = mean(RPKM)) %>% spread(., data_type, meanRPKM)
+
+rainin.exact_matched_wide$metatranscriptomics[is.na(rainin.exact_matched_wide$metatranscriptomics)]<-0
+rainin.exact_matched_wide$metagenomics[is.na(rainin.exact_matched_wide$metagenomics)]<-1
+rainin.exact_matched_wide_ratio <- rainin.exact_matched_wide %>% mutate(logRatio = log10(metatranscriptomics/metagenomics))
+
+is.na(rainin.exact_matched_wide_ratio)<-sapply(rainin.exact_matched_wide_ratio, is.infinite) # replace inf to NAs  
+rainin.exact_matched_wide_ratio[is.na(rainin.exact_matched_wide_ratio)]<-0 # replace NA to 0s 
+
+
+rainin.exact_matched_wide_ratio %>% ggplot(., aes(GroupAttribute, logRatio, color = GroupAttribute)) + geom_boxplot(outlier.colour = NA) +  geom_jitter(width = 0.2)+stat_summary(fun.y = mean, geom = "errorbar", aes(ymax = ..y.., ymin = ..y..), width = .75, linetype = "dashed")+scale_color_npg()+ theme_classic() 
+
+rainin.exact_matched_wide_ratio %>% ggplot(., aes(metagenomics, metatranscriptomics, color = GroupAttribute)) + geom_point()+scale_color_npg()+ theme_classic() 
++  geom_jitter(width = 0.2)+stat_summary(fun.y = mean, geom = "errorbar", aes(ymax = ..y.., ymin = ..y..), width = .75, linetype = "dashed")+scale_color_npg()+ theme_classic() 
 ```
