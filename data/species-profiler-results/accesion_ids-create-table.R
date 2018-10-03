@@ -1,21 +1,20 @@
 require("tidyverse")
 
 # Retrieve Accession IDs for Uniprot 
-ncbi_df<-read_delim("refseq_against_MetaHIT-SPAdes_uniqueBGCs_tabular-file-tophit_90-50", 
-           delim = "\t", col_names = FALSE)
-colnames(ncbi_df) <- c("sseqid", "stitle", "sacc", "qseqid", "qlen", "qcovs", "pident", "evalue","qstart", "qend")
+ncbi_df<-read_delim("species_results-MetaHIT-spanish.txt", 
+                    delim = "\t", col_names = TRUE)
+names(ncbi_df)<-c("BGC_NAME", "TAXA_NAME", "ACC_ID", "PERC_IDENT", "COVERAGE")
 
-filter_ncbi_df <- ncbi_df %>% filter(qcovs >=50 & pident >=90) # 278 mapped
-write_lines(unique(filter_ncbi_df$sacc), "refseq_against_MetaHIT-SPAdes_uniqueBGCs-accession_ids-tophit_90-50.txt")
+filter_ncbi_df <- ncbi_df %>% filter(ACC_ID != "N/A") # 400 mapped
+write_lines(unique(filter_ncbi_df$ACC_ID), "refseq_against_MetaHIT-SPAdes_uniqueBGCs-accession_ids-500_hits-bitscore.txt")
 
 uniprot_df <- read_delim("uniprot-results-accesion-id-mapped.txt",
-                         col_names = T, delim = "\t") %>% select( Organism, `Taxonomic lineage (PHYLUM)`, `yourlist:M20180914AAFB7E4D2F1D05654627429E83DA5CCE0CF9567` ) 
+                         col_names = T, delim = "\t") %>% select( Organism, `Taxonomic lineage (PHYLUM)`, `yourlist:M20180928AAFB7E4D2F1D05654627429E83DA5CCE0EA8F1R` ) 
 
 colnames(uniprot_df) <- c( "ORGANISM", "PHYLUM", "ACCID")
-uniprot_df_unique <- uniprot_df %>%  group_by(ORGANISM,PHYLUM,ACCID ) %>% distinct()  %>% separate(., ACCID, into = c("OtherACCID", "ACCID"), 
-                                                                                                   sep = ","  )
+uniprot_df_unique <- uniprot_df %>%  group_by(ORGANISM,PHYLUM,ACCID ) %>% distinct() 
 
-#Output from species_profiler to combined results from NCBI and UniPTO
+#Output from species_profiler to combined results from NCBI and UniProt
 species_profile_df<-read_delim("species_results-MetaHIT-spanish.txt", 
                     delim = "\t", col_names = TRUE)
 combined_results <- species_profile_df %>% left_join(., uniprot_df_unique, by = c("ACC_ID" = "ACCID"))

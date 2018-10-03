@@ -22,7 +22,6 @@ library(ggpubr)
 We must filter our BLASTn quantification results by BGC coverage criteria (>=50).
 
 ```{r}
-
 #load quantifier data 
 quantifier_df <- read_delim("combined-MetaHIT_Gut-spanish-quantifier-results.txt", col_names = F, delim = "\t")
 names(quantifier_df) <- c("bgcName", "Coverage", "RPKM", "Sample") # add column names
@@ -68,36 +67,43 @@ species_df$ORGANISM <- ifelse(species_df$ORGANISM == "N/A", species_df$Manual_OR
 
 species_df$PHYLUM[species_df$PHYLUM == "N/A" ] <-"Unassigned"
 
-plot_piechart<- function(df){
-  pie.df <- df %>% group_by(PHYLUM) %>% count() %>% ungroup() %>%  mutate(perc=n/sum(n)*100.0) %>% arrange(desc(n)) 
-  pie.df$PHYLUM <- factor(pie.df$PHYLUM, levels = pie.df$PHYLUM[order(pie.df$perc)])
-  
-  blank_theme <- theme_minimal()+
-  theme(
-    axis.title.x = element_blank(),
-    axis.title.y = element_blank(),
-    axis.text =  element_blank(),
-    panel.border = element_blank(),
-    panel.grid=element_blank(),
-    axis.ticks = element_blank(),
-    plot.title=element_text(size=14, face="bold")
-  )
-  
-  ggplot(pie.df, aes(x = "", y=perc, fill = factor(PHYLUM))) + 
-    geom_col(width=1, color = "white")+
-    coord_polar(theta = "y")+
-    geom_text(aes(label=paste0(sprintf("%0.1f", round(perc, digits = 2)), "%")), 
-              size=4,
-              color="black",
-              position = position_stack(vjust = .5)) + guides(fill = guide_legend(reverse = TRUE)) +
-    scale_fill_npg() +
-    theme_classic() + blank_theme + labs(fill='Phylum') 
-  ggsave("BGC-assigned-Phylum-piechart.eps", width = 11, height = 8, units = "in", device = "eps") 
+species_df_bgc_class <-species_df %>% separate(., BGC_NAME,c("sampleID", "scaffoldName", "clusterlen", "bgcClass", "software", "Coord"),sep = "__", remove = F) %>% select(-c(2:4,6:7))
+species_recoded_bgc_results<-recode_bgcClass(species_df_bgc_class)
 
-  
-}
-
-plot_piechart(species_df) # plot for piechart bacterial Phyla assigned to BGC 
+species_recoded_bgc_results %>% group_by(PHYLUM,bgcClass) %>% count() %>% ggplot(.,aes(reorder(PHYLUM, n), n)) + geom_col(aes(fill = bgcClass)) + scale_fill_npg() + coord_flip()+ theme_bw() 
+ggsave("BGC-counts-perclass_Phyla-barplot.eps", width = 7.3, height = 6.31, units = "in", device = "eps") 
+species_recoded_bgc_results %>% group_by(PHYLUM) %>% count() %>% ggplot(.,aes(reorder(PHYLUM, n), n)) + geom_col() + scale_fill_npg() + coord_flip()+ theme_bw() + xlab("Phyla") + ylab("Total BGCs detected") +geom_text(aes(label=n), vjust=0,hjust=-.5)
+ggsave("BGC-counts-perPhyla-barplot.eps", width =11, height = 6.31, units = "in", device = "eps") 
+# plot_piechart<- function(df){
+#   pie.df <- df %>% group_by(PHYLUM) %>% count() %>% ungroup() %>%  mutate(perc=n/sum(n)*100.0) %>% arrange(desc(n)) 
+#   pie.df$PHYLUM <- factor(pie.df$PHYLUM, levels = pie.df$PHYLUM[order(pie.df$perc)])
+#   
+#   blank_theme <- theme_minimal()+
+#   theme(
+#     axis.title.x = element_blank(),
+#     axis.title.y = element_blank(),
+#     axis.text =  element_blank(),
+#     panel.border = element_blank(),
+#     panel.grid=element_blank(),
+#     axis.ticks = element_blank(),
+#     plot.title=element_text(size=14, face="bold")
+#   )
+#   
+#   ggplot(pie.df, aes(x = "", y=perc, fill = factor(PHYLUM))) + 
+#     geom_col(width=1, color = "white")+
+#     coord_polar(theta = "y")+
+#     geom_text(aes(label=paste0(sprintf("%0.1f", round(perc, digits = 2)), "%")), 
+#               size=4,
+#               color="black",
+#               position = position_stack(vjust = .5)) + guides(fill = guide_legend(reverse = TRUE)) +
+#     scale_fill_npg() +
+#     theme_classic() + blank_theme + labs(fill='Phylum') 
+#   ggsave("BGC-assigned-Phylum-piechart.eps", width = 11, height = 8, units = "in", device = "eps") 
+# 
+#   
+# }
+# 
+# plot_piechart(species_df) # plot for piechart bacterial Phyla assigned to BGC 
 
 ```
 
@@ -148,6 +154,12 @@ prepare_rainin_data <- function(df, metadata_df){
 
 rainin_df_update<- prepare_rainin_data(rainin_df, sample_metadata)
 
+
+rainin_df_update %>% filter(bgcName !="smNRPS-BP") %>% group_by(GroupAttribute,bgcName) %>% mutate(ymean= mean(RPKM)) %>% mutate(ymedian= median(RPKM)) %>%  ggplot(., aes(Sample,RPKM)) + geom_col()+geom_hline(aes(yintercept=ymedian), color="red", linetype="dashed")+geom_hline(aes(yintercept=ymean), color="red", linetype="solid")+theme_pubclean()+ facet_grid(bgcName~GroupAttribute, switch= "x",scales = "free_x", space = "free_x") + xlab("Disease")+  theme(
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) + theme(plot.title = element_text(hjust = 0.5,face = "bold",size = "24"))
+ggsave("combined-smNRPS-MetaHIT-barplot.eps", width = 11, height = 5, units = "in", device = "eps") 
+
 bar_plot_per_cluster<- function(df, cluster){
   plot_title <- paste0(cluster, "-","barplot",".eps")
   df %>% filter(bgcName == cluster) %>% group_by(GroupAttribute) %>% mutate(ymean= mean(RPKM)) %>% mutate(ymedian= median(RPKM)) %>%  ggplot(., aes(Sample,RPKM)) + geom_col()+geom_hline(aes(yintercept=ymedian), color="red", linetype="dashed")+geom_hline(aes(yintercept=ymean), color="red", linetype="solid")+theme_pubclean()+ facet_grid(~GroupAttribute, switch= "x",scales = "free_x", space = "free_x") + xlab("Disease")+  theme(
@@ -161,6 +173,8 @@ bar_plot_per_cluster<- function(df, cluster){
 bar_plot_per_cluster(rainin_df_update, "smNRPS-CC" )
 bar_plot_per_cluster(rainin_df_update, "smNRPS-CB" )
 bar_plot_per_cluster(rainin_df_update, "smNRPS-BP" )
+
+
 ################################################
 #smNRPS-CB:V1.UC61.0__NODE_930_length_26002_cov_3.77986__26002__nrps__ANTISMASH__0_26002 
 spanish_hitratio %>% filter(bgcName == "V1.UC61.0__NODE_930_length_26002_cov_3.77986__26002__nrps__ANTISMASH__0_26002")
@@ -232,6 +246,23 @@ filter_quantifier_df_updated <- prepare_data(filter_quantifier_df, sample_metada
 quantifier_CD_C <-filter_quantifier_df_updated %>% filter(GroupAttribute == "CD" | GroupAttribute == "C") 
 quantifier_UC_C <-filter_quantifier_df_updated %>% filter(GroupAttribute == "UC" | GroupAttribute == "C") 
 quantifier_UC_CD <-filter_quantifier_df_updated %>% filter(GroupAttribute == "UC" | GroupAttribute == "CD") 
+
+################
+#Rainin not exact clusters barplot
+bar_plot_per_cluster(filter_quantifier_df_updated, "V1.UC61.0__NODE_930_length_26002_cov_3.77986__26002__nrps__ANTISMASH__0_26002" ) #smNRPS CB 
+bar_plot_per_cluster(filter_quantifier_df_updated, "V1.CD18.3__NODE_78_length_114577_cov_12.9704__43190__nrps__ANTISMASH__49316_92506" ) #smNRPS CC 
+###############
+#Enriched CD E.coli dervived clusters 
+bar_plot_per_cluster(filter_quantifier_df_updated, "V1.UC61.0__NODE_228_length_65988_cov_4.67854__26289__nrps__ANTISMASH__39699_65988" )
+bar_plot_per_cluster(filter_quantifier_df_updated, "V1.UC61.0__NODE_2273_length_12464_cov_2.76678__12464__t1pks__ANTISMASH__0_12464" )
+bar_plot_per_cluster(filter_quantifier_df_updated,"V1.CD41.0__NODE_43_length_139509_cov_97.9643__53525__nrps__ANTISMASH__80787_134312")
+bar_plot_per_cluster(filter_quantifier_df_updated,"V1.UC5.0__NODE_2999_length_8272_cov_2.30449__8272__bacteriocin__ANTISMASH__0_8272")
+bar_plot_per_cluster(filter_quantifier_df_updated,"V1.CD35.1__NODE_3185_length_6846_cov_4.30231__6846__siderophore__ANTISMASH__0_6846")
+
+bar_plot_per_cluster(filter_quantifier_df_updated,"V1.CD10.0__NODE_453_length_17115_cov_2.32239__17115__siderophore__ANTISMASH__0_17115")
+
+bar_plot_per_cluster(filter_quantifier_df_updated,"V1.CD18.3__NODE_40_length_166683_cov_10.5209__59165__nrps-t1pks__ANTISMASH__61574_120739")
+#################
 
 #Format dataframe to run lefse 
 source("format_data_for_lefse.R")
@@ -310,7 +341,7 @@ ggsave("lefse_UC_CD_discriminative_features.eps", width = 10, height = 10, units
 # 
 # enrichedUC_C_list<-lefse_UC_C_discriminative_features%>% filter(class_discriminitive == "UC")
 # enrichedUC_CD_list<-lefse_UC_CD_discriminative_features%>% filter(class_discriminitive == "UC")
-# gplots::venn(list(enrichedCD_C = enrichedUC_C_list$BGC, enrichedUC_CD = enrichedUC_CD_list$BGC))
+# gplots::venn(list(enrichedUC_CD = enrichedUC_CD_list$BGC, enrichedUC_C= enrichedUC_C_list$BGC))
 ```
 
 ```{r}
@@ -375,41 +406,6 @@ lefse_UC_CD_supp_table<-supplementary_tables(lefse_UC_CD,quantifier_UC_CD_KW,spe
 ```
 
 
-```{r}
-#Heatmap of RPKM total 
-# 
-# lefse_CD_C_recode_important_feat<-lefse_CD_C_supp_table %>% filter(class_discriminitive!= "-" & LDA_score!="-") 
-# heatmap_RPKM <- filter_quantifier_df_updated  %>% filter(GroupAttribute == "CD" | GroupAttribute == "C") %>% filter(bgcName %in% lefse_CD_C_recode_important_feat$BGC)%>% select(-c(4))
-# data_wide <- dcast(heatmap_RPKM, bgcName ~ Sample, value.var="RPKM") 
-# row.names(data_wide)<- data_wide$bgcName
-# 
-# 
-# 
-# data_wide<-data_wide[,-1]
-# data_wide[is.na(data_wide)] <- 0
-# data_wide<-as.matrix(data_wide)
-# 
-# annotations<-read.csv("sample_metadata.csv", header=TRUE, sep=",")
-# rownames(annotations)<-annotations$Sample
-# annotations_col<-annotations[-c(1)]
-# 
-# #Colors for heatmap 
-# bk = unique(c(seq(0,0, length=100), seq(0.06,90,length=1000)))
-# hmcols<- colorRampPalette(c("white","blue","green","yellow","orange","red"))(length(bk)-1)
-# 
-# pheatmap::pheatmap(data_wide, scale = "none", breaks=bk, color=hmcols,annotation= annotations_col,show_rownames=FALSE, show_colnames = FALSE,
-#                    clustering_distance_rows = "correlation", clustering_distance_cols = "correlation", 
-#                    clustering_method = "complete",main="Complete clustering using correlation distance metric of RPKM of BGCs")
-# 
-# 
-# km<-kmeans(data_wide,2)
-# m.kmeans<- cbind(data_wide, km$cluster) 
-# order.m.kmeans<- order(m.kmeans[,93])
-# m.kmeans<- m.kmeans[order.m.kmeans,] # order the matrix according to the order of the last column
-# pheatmap::pheatmap(m.kmeans[,1:92], scale = "none", breaks=bk, color=hmcols,annotation= annotations_col,show_rownames=FALSE, show_colnames = FALSE, main="Kmean clustering (2) of Relative Score of BGCs above 50% breadth")
-
-
-```
 
 
 
