@@ -129,9 +129,18 @@ spanish_hitratio <- calculate_hitRatio(spanish_filtered_results, sample_metadata
 
 ################################################
 #Quanitfication of the exact CB and CC clusters for MetaHIT 
-rainin_df <- read_delim("combined-MetaHIT_Gut-rainin-quantifier-results.txt", delim = "\t",col_names = FALSE)%>%filter(X2 >= 50) %>% inner_join(., sample_metadata, by = c("X4"="Sample"))
+#rainin_df <- read_delim("combined-MetaHIT_Gut-rainin-quantifier-results.txt", delim = "\t",col_names = FALSE)%>%filter(X2 >= 50) %>% inner_join(., sample_metadata, by = c("X4"="Sample"))
+#names(rainin_df)[1:4] <- c("bgcName", "Coverage", "RPKM", "Sample") # add column names
+######################
+#Quanitfication of the exact CB and CC clusters for MetaHIT  with unique reads mapped to each clusters
+rainin_df <- read_delim("smNRPS-exact-unique-reads/combined-MetaHIT_Gut-rainin-exact-unique-reads-quantifier-results.txt", delim = "\t",col_names = FALSE)%>%filter(X2 >= 50) %>% inner_join(., sample_metadata, by = c("X4"="Sample"))
 names(rainin_df)[1:4] <- c("bgcName", "Coverage", "RPKM", "Sample") # add column names
 
+###########################
+#rainin_df <- read_delim("smNRPS-exact-unique-reads-updated/combined-MetaHIT_Gut-rainin-exact-unique-reads-updated-quantifier-results.txt", delim = "\t",col_names = FALSE)%>%filter(X2 >= 50) %>% inner_join(., sample_metadata, by = c("X4"="Sample"))
+#names(rainin_df)[1:4] <- c("bgcName", "Coverage", "RPKM", "Sample") # add column names
+
+#####################################
 rainin_df_hitratio <- calculate_hitRatio(rainin_df, sample_metadata)
 
 prepare_rainin_data <- function(df, metadata_df){
@@ -158,7 +167,22 @@ rainin_df_update<- prepare_rainin_data(rainin_df, sample_metadata)
 rainin_df_update %>% filter(bgcName !="smNRPS-BP") %>% group_by(GroupAttribute,bgcName) %>% mutate(ymean= mean(RPKM)) %>% mutate(ymedian= median(RPKM)) %>%  ggplot(., aes(Sample,RPKM)) + geom_col()+geom_hline(aes(yintercept=ymedian), color="red", linetype="dashed")+geom_hline(aes(yintercept=ymean), color="red", linetype="solid")+theme_pubclean()+ facet_grid(bgcName~GroupAttribute, switch= "x",scales = "free_x", space = "free_x") + xlab("Disease")+  theme(
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank()) + theme(plot.title = element_text(hjust = 0.5,face = "bold",size = "24"))
-ggsave("combined-smNRPS-MetaHIT-barplot.eps", width = 11, height = 5, units = "in", device = "eps") 
+#ggsave("combined-smNRPS-MetaHIT-barplot.eps", width = 11, height = 5, units = "in", device = "eps") 
+#ggsave("combined-smNRPS-exact-unique-reads-MetaHIT-barplot.eps", width = 11, height = 5, units = "in", device = "eps") 
+
+ggsave("combined-smNRPS-exact-unique-reads-MetaHIT-update-barplot.eps", width = 11, height = 5, units = "in", device = "eps") 
+
+
+rainin_df_update %>% filter(bgcName !="smNRPS-BP") %>% group_by(GroupAttribute) %>% mutate(ymean= mean(RPKM)) %>% mutate(ymedian= median(RPKM)) %>% ggplot(., aes(Sample,RPKM)) + geom_bar(stat = "identity", aes(fill=bgcName))+ theme_pubclean()+geom_hline(aes(yintercept=ymedian), color="black", linetype="dashed")+geom_hline(aes(yintercept=ymean), color="black", linetype="solid")+ facet_grid(~GroupAttribute, switch= "x",scales = "free_x", space = "free_x") + xlab("Disease")+  theme(
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) + theme(plot.title = element_text(hjust = 0.5,face = "bold",size = "24")) + scale_fill_npg() + coord_cartesian(ylim=c(0, 20))
+ggsave("combined-smNRPS-exact-unique-reads-MetaHIT-barplot-combined-max20.eps", width = 11, height = 5, units = "in", device = "eps") 
+
+rainin_df_update %>% filter(bgcName !="smNRPS-BP") %>% group_by(GroupAttribute) %>% mutate(ymean= mean(RPKM)) %>% mutate(ymedian= median(RPKM)) %>% ggplot(., aes(Sample,RPKM)) + geom_bar(stat = "identity", aes(fill=bgcName))+ theme_pubclean()+geom_hline(aes(yintercept=ymedian), color="black", linetype="dashed")+geom_hline(aes(yintercept=ymean), color="black", linetype="solid")+ facet_grid(~GroupAttribute, switch= "x",scales = "free_x", space = "free_x") + xlab("Disease")+  theme(
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) + theme(plot.title = element_text(hjust = 0.5,face = "bold",size = "24")) + scale_fill_npg() 
+ggsave("combined-smNRPS-exact-unique-reads-MetaHIT-barplot-combined.eps", width = 11, height = 5, units = "in", device = "eps") 
+#######################################################################################################
 
 bar_plot_per_cluster<- function(df, cluster){
   plot_title <- paste0(cluster, "-","barplot",".eps")
