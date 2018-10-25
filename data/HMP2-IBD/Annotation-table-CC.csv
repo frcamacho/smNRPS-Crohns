@@ -1,0 +1,7 @@
+Name,Type,Minimum,Maximum,Length,Direction
+Hypothetical protein_1,CDS,778,"1,329",552,forward
+Hypothetical protein_2,CDS,"1,326","1,643",318,forward
+Hypothetical protein_3,CDS,"1,729","2,688",960,forward
+Hypothetical protein_4,CDS,"2,685","4,091","1,407",forward
+Hypothetical protein_5,CDS,"4,114","4,344",231,forward
+Hypothetical protein_6,CDS,"4,367","5,875","1,509",forward

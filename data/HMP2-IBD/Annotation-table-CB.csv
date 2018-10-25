@@ -1,0 +1,7 @@
+Name,Type,Minimum,Maximum,Length,Direction
+hypothetical protein_1,CDS,779,"1,330",552,forward
+hypothetical protein_2,CDS,"1,327","1,644",318,forward
+alpha/beta hydrolase CDS,CDS,"1,702","2,661",960,forward
+non-ribosomal peptide synthase CDS,CDS,"2,658","4,064","1,407",forward
+acyl carrier protein CDS,CDS,"4,184","4,414",231,forward
+long-chain acyl-CoA synthetase CDS,CDS,"4,437","5,945","1,509",forward

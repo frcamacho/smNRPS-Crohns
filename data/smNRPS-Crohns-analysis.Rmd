@@ -2,7 +2,7 @@
 title: "smNRPS-Crohns-analysis"
 author: "Francine Camacho"
 date: "8/30/2018"
-output: pdf_document
+output: html_document
 ---
 
 ```{r setup, include=FALSE}
@@ -22,11 +22,13 @@ library(ggpubr)
 We must filter our BLASTn quantification results by BGC coverage criteria (>=50).
 
 ```{r}
-#load quantifier data 
+
+#load in quantifier data 
 quantifier_df <- read_delim("combined-MetaHIT_Gut-spanish-quantifier-results.txt", col_names = F, delim = "\t")
 names(quantifier_df) <- c("bgcName", "Coverage", "RPKM", "Sample") # add column names
 
-filter_quantifier_df <- quantifier_df %>% filter(Coverage >= 50)  # filter by coverage 
+#Filter data by coverage 
+filter_quantifier_df <- quantifier_df %>% filter(Coverage >= 50)
 sample_metadata <- read_csv("sample_metadata.csv", col_names = T) # load metadata
 
 #add sample metadata to filtered quantifier dataframe 
@@ -56,10 +58,8 @@ recode_bgcClass<-function(df){
 
 spanish_filtered_results<-recode_bgcClass(results_df)
 
-#knitr::kable(spanish_bgc_counts, digits = 2, caption = "BGC class counts identified using antiSMASH in MetaHIT Spanish cohort.")
 #############################
-#cultured bacteria vs uncultivated bacteria pie chart
-
+#load in uniprot species data collected from our species profiler
 species_df <- read_csv("species-profiler-results/species_results-MetaHIT-spanish_UniProt.csv", col_names = T)
 species_df[is.na(species_df)]<-"N/A"
 species_df$PHYLUM <- ifelse(species_df$PHYLUM == "N/A", species_df$Manual_PHYLUM, species_df$PHYLUM)
@@ -70,40 +70,11 @@ species_df$PHYLUM[species_df$PHYLUM == "N/A" ] <-"Unassigned"
 species_df_bgc_class <-species_df %>% separate(., BGC_NAME,c("sampleID", "scaffoldName", "clusterlen", "bgcClass", "software", "Coord"),sep = "__", remove = F) %>% select(-c(2:4,6:7))
 species_recoded_bgc_results<-recode_bgcClass(species_df_bgc_class)
 
+#Plot BGC counts per Phyla detected 
 species_recoded_bgc_results %>% group_by(PHYLUM,bgcClass) %>% count() %>% ggplot(.,aes(reorder(PHYLUM, n), n)) + geom_col(aes(fill = bgcClass)) + scale_fill_npg() + coord_flip()+ theme_bw() 
-ggsave("BGC-counts-perclass_Phyla-barplot.eps", width = 7.3, height = 6.31, units = "in", device = "eps") 
+#ggsave("BGC-counts-perclass_Phyla-barplot.eps", width = 7.3, height = 6.31, units = "in", device = "eps") 
 species_recoded_bgc_results %>% group_by(PHYLUM) %>% count() %>% ggplot(.,aes(reorder(PHYLUM, n), n)) + geom_col() + scale_fill_npg() + coord_flip()+ theme_bw() + xlab("Phyla") + ylab("Total BGCs detected") +geom_text(aes(label=n), vjust=0,hjust=-.5)
-ggsave("BGC-counts-perPhyla-barplot.eps", width =11, height = 6.31, units = "in", device = "eps") 
-# plot_piechart<- function(df){
-#   pie.df <- df %>% group_by(PHYLUM) %>% count() %>% ungroup() %>%  mutate(perc=n/sum(n)*100.0) %>% arrange(desc(n)) 
-#   pie.df$PHYLUM <- factor(pie.df$PHYLUM, levels = pie.df$PHYLUM[order(pie.df$perc)])
-#   
-#   blank_theme <- theme_minimal()+
-#   theme(
-#     axis.title.x = element_blank(),
-#     axis.title.y = element_blank(),
-#     axis.text =  element_blank(),
-#     panel.border = element_blank(),
-#     panel.grid=element_blank(),
-#     axis.ticks = element_blank(),
-#     plot.title=element_text(size=14, face="bold")
-#   )
-#   
-#   ggplot(pie.df, aes(x = "", y=perc, fill = factor(PHYLUM))) + 
-#     geom_col(width=1, color = "white")+
-#     coord_polar(theta = "y")+
-#     geom_text(aes(label=paste0(sprintf("%0.1f", round(perc, digits = 2)), "%")), 
-#               size=4,
-#               color="black",
-#               position = position_stack(vjust = .5)) + guides(fill = guide_legend(reverse = TRUE)) +
-#     scale_fill_npg() +
-#     theme_classic() + blank_theme + labs(fill='Phylum') 
-#   ggsave("BGC-assigned-Phylum-piechart.eps", width = 11, height = 8, units = "in", device = "eps") 
-# 
-#   
-# }
-# 
-# plot_piechart(species_df) # plot for piechart bacterial Phyla assigned to BGC 
+#ggsave("BGC-counts-perPhyla-barplot.eps", width =11, height = 6.31, units = "in", device = "eps") 
 
 ```
 
@@ -170,18 +141,18 @@ rainin_df_update %>% filter(bgcName !="smNRPS-BP") %>% group_by(GroupAttribute,b
 #ggsave("combined-smNRPS-MetaHIT-barplot.eps", width = 11, height = 5, units = "in", device = "eps") 
 #ggsave("combined-smNRPS-exact-unique-reads-MetaHIT-barplot.eps", width = 11, height = 5, units = "in", device = "eps") 
 
-ggsave("combined-smNRPS-exact-unique-reads-MetaHIT-update-barplot.eps", width = 11, height = 5, units = "in", device = "eps") 
+#ggsave("combined-smNRPS-exact-unique-reads-MetaHIT-update-barplot.eps", width = 11, height = 5, units = "in", device = "eps") 
 
 
 rainin_df_update %>% filter(bgcName !="smNRPS-BP") %>% group_by(GroupAttribute) %>% mutate(ymean= mean(RPKM)) %>% mutate(ymedian= median(RPKM)) %>% ggplot(., aes(Sample,RPKM)) + geom_bar(stat = "identity", aes(fill=bgcName))+ theme_pubclean()+geom_hline(aes(yintercept=ymedian), color="black", linetype="dashed")+geom_hline(aes(yintercept=ymean), color="black", linetype="solid")+ facet_grid(~GroupAttribute, switch= "x",scales = "free_x", space = "free_x") + xlab("Disease")+  theme(
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank()) + theme(plot.title = element_text(hjust = 0.5,face = "bold",size = "24")) + scale_fill_npg() + coord_cartesian(ylim=c(0, 20))
-ggsave("combined-smNRPS-exact-unique-reads-MetaHIT-barplot-combined-max20.eps", width = 11, height = 5, units = "in", device = "eps") 
+#ggsave("combined-smNRPS-exact-unique-reads-MetaHIT-barplot-combined-max20.eps", width = 11, height = 5, units = "in", device = "eps") 
 
 rainin_df_update %>% filter(bgcName !="smNRPS-BP") %>% group_by(GroupAttribute) %>% mutate(ymean= mean(RPKM)) %>% mutate(ymedian= median(RPKM)) %>% ggplot(., aes(Sample,RPKM)) + geom_bar(stat = "identity", aes(fill=bgcName))+ theme_pubclean()+geom_hline(aes(yintercept=ymedian), color="black", linetype="dashed")+geom_hline(aes(yintercept=ymean), color="black", linetype="solid")+ facet_grid(~GroupAttribute, switch= "x",scales = "free_x", space = "free_x") + xlab("Disease")+  theme(
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank()) + theme(plot.title = element_text(hjust = 0.5,face = "bold",size = "24")) + scale_fill_npg() 
-ggsave("combined-smNRPS-exact-unique-reads-MetaHIT-barplot-combined.eps", width = 11, height = 5, units = "in", device = "eps") 
+#ggsave("combined-smNRPS-exact-unique-reads-MetaHIT-barplot-combined.eps", width = 11, height = 5, units = "in", device = "eps") 
 #######################################################################################################
 
 bar_plot_per_cluster<- function(df, cluster){
@@ -190,13 +161,13 @@ bar_plot_per_cluster<- function(df, cluster){
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank()) + ggtitle(cluster) + theme(plot.title = element_text(hjust = 0.5,face = "bold",size = "24"))
   
-   ggsave(plot_title, width = 11, height = 5, units = "in", device = "eps") 
+   #ggsave(plot_title, width = 11, height = 5, units = "in", device = "eps") 
 
 }
 
 bar_plot_per_cluster(rainin_df_update, "smNRPS-CC" )
 bar_plot_per_cluster(rainin_df_update, "smNRPS-CB" )
-bar_plot_per_cluster(rainin_df_update, "smNRPS-BP" )
+#bar_plot_per_cluster(rainin_df_update, "smNRPS-BP" )
 
 
 ################################################
@@ -242,6 +213,11 @@ wilcoxon_test<-function(df, cohort, testType){
 wilcoxon_test(spanish_filtered_results, c("C", "CD"), "greater") # twosided=8.806e-05/ 4.403e-05
 wilcoxon_test(spanish_filtered_results, c("CD", "UC"), "less") # twosided=0.0008254,0.0004127
 wilcoxon_test(spanish_filtered_results, c("C", "UC"), "greater")#twosided=0.175, 0.08748
+
+############
+#Determine the mean BGCs detected in each cohort pairs 
+spanish_filtered_results %>% filter(GroupAttribute %in% c("C", "CD")) %>% count(Sample) %>% inner_join(., sample_metadata) %>% group_by(GroupAttribute) %>% mutate(meanBGC = mean(n)) %>% distinct(meanBGC, GroupAttribute)
+spanish_filtered_results %>% filter(GroupAttribute %in% c("C", "UC")) %>% count(Sample) %>% inner_join(., sample_metadata) %>% group_by(GroupAttribute) %>% mutate(meanBGC = mean(n)) %>% distinct(meanBGC, GroupAttribute)
 ```
 
 ```{r}
@@ -286,6 +262,11 @@ bar_plot_per_cluster(filter_quantifier_df_updated,"V1.CD35.1__NODE_3185_length_6
 bar_plot_per_cluster(filter_quantifier_df_updated,"V1.CD10.0__NODE_453_length_17115_cov_2.32239__17115__siderophore__ANTISMASH__0_17115")
 
 bar_plot_per_cluster(filter_quantifier_df_updated,"V1.CD18.3__NODE_40_length_166683_cov_10.5209__59165__nrps-t1pks__ANTISMASH__61574_120739")
+
+ecoli_bgcs<-c("V1.UC61.0__NODE_228_length_65988_cov_4.67854__26289__nrps__ANTISMASH__39699_65988","V1.UC61.0__NODE_2273_length_12464_cov_2.76678__12464__t1pks__ANTISMASH__0_12464","V1.CD41.0__NODE_43_length_139509_cov_97.9643__53525__nrps__ANTISMASH__80787_134312","V1.UC5.0__NODE_2999_length_8272_cov_2.30449__8272__bacteriocin__ANTISMASH__0_8272", "V1.CD35.1__NODE_3185_length_6846_cov_4.30231__6846__siderophore__ANTISMASH__0_6846", "V1.CD10.0__NODE_453_length_17115_cov_2.32239__17115__siderophore__ANTISMASH__0_17115", "V1.CD18.3__NODE_40_length_166683_cov_10.5209__59165__nrps")
+
+ecoli_bgc_data<- filter_quantifier_df %>% filter(bgcName %in% ecoli_bgcs) 
+
 #################
 
 #Format dataframe to run lefse 
@@ -317,7 +298,7 @@ lefse_CD_C_discriminative_features %>%  mutate(BGC = reorder(BGC, LDA_score)) %>
   geom_bar(stat = "identity")  +
   ylab("LDA SCORE (log 10)") +
   coord_flip() + theme_bw() + scale_fill_manual(values = c("#DC0000FF", "#00A087FF")) + theme(legend.position="top") +theme(legend.title=element_blank())
- ggsave("lefse_CD_C_discriminative_features.eps", width = 10, height = 15, units = "in", device = "eps") 
+ #ggsave("lefse_CD_C_discriminative_features.eps", width = 10, height = 15, units = "in", device = "eps") 
 
 ########################################################
  
@@ -334,7 +315,7 @@ lefse_UC_C_discriminative_features %>%  mutate(BGC = reorder(BGC, LDA_score)) %>
   geom_bar(stat = "identity")  +
   ylab("LDA SCORE (log 10)") +
   coord_flip() + theme_bw() + scale_fill_manual(values = c("#DC0000FF", "#00A087FF")) + theme(legend.position="top") +theme(legend.title=element_blank())
-ggsave("lefse_UC_C_discriminative_features.eps", width = 10, height = 15, units = "in", device = "eps") 
+#ggsave("lefse_UC_C_discriminative_features.eps", width = 10, height = 15, units = "in", device = "eps") 
 
 
 
@@ -352,7 +333,7 @@ lefse_UC_CD_discriminative_features %>%  mutate(BGC = reorder(BGC, LDA_score)) %
   geom_bar(stat = "identity")  +
   ylab("LDA SCORE (log 10)") +
   coord_flip() + theme_bw() + scale_fill_manual(values = c("#DC0000FF", "#00A087FF")) + theme(legend.position="top") +theme(legend.title=element_blank())
-ggsave("lefse_UC_CD_discriminative_features.eps", width = 10, height = 10, units = "in", device = "eps") 
+#ggsave("lefse_UC_CD_discriminative_features.eps", width = 10, height = 10, units = "in", device = "eps") 
 
 ```
 
